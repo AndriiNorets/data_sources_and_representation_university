@@ -1,0 +1,79 @@
+ALTER USER msu_noretsa IDENTIFIED BY "NoweSilneHaQdd44K1Fslo123";
+
+CREATE TABLE regions (
+region_id NUMBER PRIMARY KEY,
+region_name VARCHAR2(50)
+);
+
+CREATE TABLE countries (
+country_id CHAR(2) PRIMARY KEY, -- Np. 'PL', 'US'
+country_name VARCHAR2(50),
+region_id NUMBER,
+CONSTRAINT fk_countries_regions FOREIGN KEY (region_id) REFERENCES regions(region_id)
+);
+
+CREATE TABLE jobs (
+job_id VARCHAR2(10) PRIMARY KEY,
+job_title VARCHAR2(50) NOT NULL,
+min_salary NUMBER,
+max_salary NUMBER,
+CONSTRAINT check_salary_diff CHECK (max_salary - min_salary >= 2000)
+);
+
+CREATE TABLE departments (
+department_id NUMBER PRIMARY KEY,
+department_name VARCHAR2(50) NOT NULL,
+location_id NUMBER
+);
+
+ALTER TABLE departments ADD manager_id NUMBER;
+
+CREATE TABLE locations (
+    location_id NUMBER PRIMARY KEY,
+    street_address VARCHAR2(100),
+    postal_code VARCHAR2(20),
+    city VARCHAR2(50) NOT NULL,
+    state_province VARCHAR2(50),
+    country_id CHAR(2),
+    CONSTRAINT fk_loc_countries FOREIGN KEY (country_id) REFERENCES countries(country_id)
+);
+
+ALTER TABLE departments
+ADD CONSTRAINT fk_dept_locations FOREIGN KEY (location_id) REFERENCES locations(location_id);
+
+CREATE TABLE employees (
+    employee_id NUMBER PRIMARY KEY,
+    first_name VARCHAR2(50),
+    last_name VARCHAR2(50) NOT NULL,
+    email VARCHAR2(50) UNIQUE,
+    phone_number VARCHAR2(20),
+    hire_date DATE NOT NULL,
+    job_id VARCHAR2(10) NOT NULL,
+    salary NUMBER(8,2),
+    commission_pct NUMBER(2,2),
+    manager_id NUMBER,
+    department_id NUMBER,
+    CONSTRAINT fk_emp_jobs FOREIGN KEY (job_id) REFERENCES jobs(job_id),
+    CONSTRAINT fk_emp_dept FOREIGN KEY (department_id) REFERENCES departments(department_id),
+    CONSTRAINT fk_emp_manager FOREIGN KEY (manager_id) REFERENCES employees(employee_id)
+);
+
+
+ALTER TABLE departments 
+ADD CONSTRAINT fk_dept_mgr FOREIGN KEY (manager_id) REFERENCES employees(employee_id);
+
+CREATE TABLE job_history (
+    employee_id NUMBER,
+    start_date DATE,
+    end_date DATE,
+    job_id VARCHAR2(10) NOT NULL,
+    department_id NUMBER,
+    PRIMARY KEY (employee_id, start_date),
+    CONSTRAINT fk_jh_emp FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
+    CONSTRAINT fk_jh_jobs FOREIGN KEY (job_id) REFERENCES jobs(job_id),
+    CONSTRAINT fk_jh_dept FOREIGN KEY (department_id) REFERENCES departments(department_id)
+);
+
+DROP TABLE job_history;
+
+FLASHBACK TABLE job_history TO BEFORE DROP;
