@@ -1,0 +1,422 @@
+# zadanie 1 - funkcja zwracajaca nazwe pracy dla podanego id
+CREATE OR REPLACE FUNCTION get_job_name(p_job_id jobs.job_id%TYPE)
+RETURN VARCHAR2 IS
+    v_title jobs.job_title%TYPE;
+BEGIN
+    SELECT job_title INTO v_title FROM jobs WHERE job_id = p_job_id;
+    RETURN v_title;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Praca o ID ' || p_job_id || ' nie istnieje.');
+END;
+/
+
+SELECT get_job_name('IT_PROG') FROM dual;
+
+# zadanie 2 - funkcja zwracajaca roczne zarobki
+CREATE OR REPLACE FUNCTION roczne_zarobki(p_emp_id employees.employee_id%TYPE)
+RETURN NUMBER IS
+    v_salary     employees.salary%TYPE;
+    v_commission employees.commission_pct%TYPE;
+BEGIN
+    SELECT salary, NVL(commission_pct, 0)
+    INTO v_salary, v_commission
+    FROM employees
+    WHERE employee_id = p_emp_id;
+
+    RETURN (v_salary * 12) + (v_salary * v_commission);
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(-20002, 'Pracownik o ID ' || p_emp_id || ' nie istnieje.');
+END;
+/
+
+SELECT roczne_zarobki(100) FROM dual;
+
+# zadanie 3 - funkcja biorace numer kierunkowy w nawias
+CREATE OR REPLACE FUNCTION numer_kierunkowy(p_phone VARCHAR2)
+RETURN VARCHAR2 IS
+    v_dot_pos NUMBER;
+    v_kierunkowy VARCHAR2(20);
+    v_reszta     VARCHAR2(50);
+BEGIN
+    v_dot_pos := INSTR(p_phone, '.');
+    IF v_dot_pos = 0 THEN
+        RETURN p_phone;
+    END IF;
+    v_kierunkowy := SUBSTR(p_phone, 1, v_dot_pos - 1);
+    v_reszta := SUBSTR(p_phone, v_dot_pos + 1);
+    RETURN '(' || v_kierunkowy || ')' || v_reszta;
+END;
+/
+
+SELECT numer_kierunkowy('515.123.4567') FROM dual;
+
+# zadanie 4 - pierwsza i ostatnia litera wielka, reszta mala
+CREATE OR REPLACE FUNCTION zmien_litery(p_tekst VARCHAR2)
+RETURN VARCHAR2 IS
+    v_result VARCHAR2(200);
+    v_len    NUMBER;
+BEGIN
+    v_len := LENGTH(p_tekst);
+    IF v_len <= 1 THEN
+        RETURN UPPER(p_tekst);
+    ELSIF v_len = 2 THEN
+        RETURN UPPER(p_tekst);
+    ELSE
+        v_result := UPPER(SUBSTR(p_tekst, 1, 1)) ||
+                    LOWER(SUBSTR(p_tekst, 2, v_len - 2)) ||
+                    UPPER(SUBSTR(p_tekst, v_len, 1));
+        RETURN v_result;
+    END IF;
+END;
+/
+
+SELECT zmien_litery('hELLo') FROM dual;
+
+# zadanie 5 - pesel na date urodzenia
+CREATE OR REPLACE FUNCTION pesel_na_date(p_pesel VARCHAR2)
+RETURN VARCHAR2 IS
+    v_rok     VARCHAR2(4);
+    v_miesiac VARCHAR2(2);
+    v_dzien   VARCHAR2(2);
+    v_mc_num  NUMBER;
+    v_rok2    VARCHAR2(2);
+BEGIN
+    v_rok2 := SUBSTR(p_pesel, 1, 2);
+    v_mc_num := TO_NUMBER(SUBSTR(p_pesel, 3, 2));
+    v_dzien := SUBSTR(p_pesel, 5, 2);
+
+    IF v_mc_num > 20 AND v_mc_num <= 32 THEN
+        v_rok := '20' || v_rok2;
+        v_miesiac := LPAD(TO_CHAR(v_mc_num - 20), 2, '0');
+    ELSIF v_mc_num > 40 AND v_mc_num <= 52 THEN
+        v_rok := '21' || v_rok2;
+        v_miesiac := LPAD(TO_CHAR(v_mc_num - 40), 2, '0');
+    ELSIF v_mc_num > 60 AND v_mc_num <= 72 THEN
+        v_rok := '22' || v_rok2;
+        v_miesiac := LPAD(TO_CHAR(v_mc_num - 60), 2, '0');
+    ELSIF v_mc_num > 80 AND v_mc_num <= 92 THEN
+        v_rok := '18' || v_rok2;
+        v_miesiac := LPAD(TO_CHAR(v_mc_num - 80), 2, '0');
+    ELSE
+        v_rok := '19' || v_rok2;
+        v_miesiac := LPAD(TO_CHAR(v_mc_num), 2, '0');
+    END IF;
+
+    RETURN v_rok || '-' || v_miesiac || '-' || v_dzien;
+END;
+/
+
+SELECT pesel_na_date('90010112345') FROM dual;
+SELECT pesel_na_date('00210112345') FROM dual;
+
+# zadanie 6 - liczba pracownikow i departamentow w kraju
+CREATE OR REPLACE FUNCTION info_kraj(p_country_name countries.country_name%TYPE)
+RETURN VARCHAR2 IS
+    v_emp_count  NUMBER;
+    v_dept_count NUMBER;
+    v_country_id countries.country_id%TYPE;
+BEGIN
+    BEGIN
+        SELECT country_id INTO v_country_id
+        FROM countries
+        WHERE country_name = p_country_name;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20003, 'Kraj o nazwie ' || p_country_name || ' nie istnieje.');
+    END;
+
+    SELECT COUNT(DISTINCT d.department_id), COUNT(e.employee_id)
+    INTO v_dept_count, v_emp_count
+    FROM departments d
+    JOIN locations l ON d.location_id = l.location_id
+    JOIN countries c ON l.country_id = c.country_id
+    LEFT JOIN employees e ON e.department_id = d.department_id
+    WHERE c.country_id = v_country_id;
+
+    RETURN 'Kraj: ' || p_country_name || ', Pracownicy: ' || v_emp_count || ', Departamenty: ' || v_dept_count;
+END;
+/
+
+SELECT info_kraj('United States of America') FROM dual;
+
+# zadanie 7 - wyzwalacz archiwum departamentow
+CREATE TABLE archiwum_departamentow (
+    id               NUMBER,
+    nazwa            VARCHAR2(100),
+    data_zamkniecia  DATE,
+    ostatni_manager  VARCHAR2(100)
+);
+
+CREATE OR REPLACE TRIGGER trg_archiwum_dept
+AFTER DELETE ON departments
+FOR EACH ROW
+DECLARE
+    v_manager_name VARCHAR2(100);
+BEGIN
+    BEGIN
+        SELECT first_name || ' ' || last_name
+        INTO v_manager_name
+        FROM employees
+        WHERE employee_id = :OLD.manager_id;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            v_manager_name := 'BRAK';
+    END;
+
+    INSERT INTO archiwum_departamentow (id, nazwa, data_zamkniecia, ostatni_manager)
+    VALUES (:OLD.department_id, :OLD.department_name, SYSDATE, v_manager_name);
+END;
+/
+
+# zadanie 8 - wyzwalacz sprawdzajacy widelki zarobkow + tabela zlodziej
+CREATE TABLE zlodziej (
+    id          NUMBER GENERATED ALWAYS AS IDENTITY,
+    username    VARCHAR2(50),
+    czas_zmiany TIMESTAMP
+);
+
+CREATE OR REPLACE TRIGGER trg_sprawdz_zarobki
+BEFORE INSERT OR UPDATE OF salary ON employees
+FOR EACH ROW
+BEGIN
+    IF :NEW.salary < 2000 OR :NEW.salary > 26000 THEN
+        INSERT INTO zlodziej (username, czas_zmiany)
+        VALUES (USER, SYSTIMESTAMP);
+
+        RAISE_APPLICATION_ERROR(-20004, 'Zarobki musza byc w przedziale 2000-26000. Proba zalogowana.');
+    END IF;
+END;
+/
+
+# zadanie 9 - sekwencja i wyzwalacz auto_increment dla employees
+CREATE SEQUENCE employees_seq START WITH 300 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_emp_auto_increment
+BEFORE INSERT ON employees
+FOR EACH ROW
+BEGIN
+    IF :NEW.employee_id IS NULL THEN
+        :NEW.employee_id := employees_seq.NEXTVAL;
+    END IF;
+END;
+/
+
+# zadanie 10 - wyzwalacz zabraniajacy operacji na JOB_GRADES
+CREATE OR REPLACE TRIGGER trg_blokuj_job_grades
+BEFORE INSERT OR UPDATE OR DELETE ON job_grades
+FOR EACH ROW
+BEGIN
+    RAISE_APPLICATION_ERROR(-20005, 'Operacje na tabeli JOB_GRADES sa zabronione.');
+END;
+/
+
+# zadanie 11 - wyzwalacz zostawiajacy stare wartosci min/max salary w jobs
+CREATE OR REPLACE TRIGGER trg_zachowaj_salary_jobs
+BEFORE UPDATE OF min_salary, max_salary ON jobs
+FOR EACH ROW
+BEGIN
+    :NEW.min_salary := :OLD.min_salary;
+    :NEW.max_salary := :OLD.max_salary;
+END;
+/
+
+# zadanie 12 - paczka ze stworzonymi procedurami i funkcjami
+CREATE OR REPLACE PACKAGE pkg_hr AS
+    FUNCTION get_job_name(p_job_id jobs.job_id%TYPE) RETURN VARCHAR2;
+    FUNCTION roczne_zarobki(p_emp_id employees.employee_id%TYPE) RETURN NUMBER;
+    FUNCTION numer_kierunkowy(p_phone VARCHAR2) RETURN VARCHAR2;
+    FUNCTION zmien_litery(p_tekst VARCHAR2) RETURN VARCHAR2;
+    FUNCTION pesel_na_date(p_pesel VARCHAR2) RETURN VARCHAR2;
+    FUNCTION info_kraj(p_country_name countries.country_name%TYPE) RETURN VARCHAR2;
+    PROCEDURE dodaj_job(p_job_id jobs.job_id%TYPE, p_job_title jobs.job_title%TYPE);
+    PROCEDURE modyfikuj_job(p_job_id jobs.job_id%TYPE, p_job_title jobs.job_title%TYPE);
+    PROCEDURE usun_job(p_job_id jobs.job_id%TYPE);
+    PROCEDURE pobierz_pracownika(p_emp_id IN employees.employee_id%TYPE, p_salary OUT employees.salary%TYPE, p_lastname OUT employees.last_name%TYPE);
+END pkg_hr;
+/
+
+CREATE OR REPLACE PACKAGE BODY pkg_hr AS
+
+    FUNCTION get_job_name(p_job_id jobs.job_id%TYPE) RETURN VARCHAR2 IS
+        v_title jobs.job_title%TYPE;
+    BEGIN
+        SELECT job_title INTO v_title FROM jobs WHERE job_id = p_job_id;
+        RETURN v_title;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20001, 'Praca o ID ' || p_job_id || ' nie istnieje.');
+    END;
+
+    FUNCTION roczne_zarobki(p_emp_id employees.employee_id%TYPE) RETURN NUMBER IS
+        v_salary employees.salary%TYPE;
+        v_commission employees.commission_pct%TYPE;
+    BEGIN
+        SELECT salary, NVL(commission_pct, 0) INTO v_salary, v_commission
+        FROM employees WHERE employee_id = p_emp_id;
+        RETURN (v_salary * 12) + (v_salary * v_commission);
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20002, 'Pracownik o ID ' || p_emp_id || ' nie istnieje.');
+    END;
+
+    FUNCTION numer_kierunkowy(p_phone VARCHAR2) RETURN VARCHAR2 IS
+        v_dot_pos NUMBER;
+    BEGIN
+        v_dot_pos := INSTR(p_phone, '.');
+        IF v_dot_pos = 0 THEN RETURN p_phone; END IF;
+        RETURN '(' || SUBSTR(p_phone, 1, v_dot_pos - 1) || ')' || SUBSTR(p_phone, v_dot_pos + 1);
+    END;
+
+    FUNCTION zmien_litery(p_tekst VARCHAR2) RETURN VARCHAR2 IS
+        v_len NUMBER;
+    BEGIN
+        v_len := LENGTH(p_tekst);
+        IF v_len <= 2 THEN RETURN UPPER(p_tekst); END IF;
+        RETURN UPPER(SUBSTR(p_tekst, 1, 1)) || LOWER(SUBSTR(p_tekst, 2, v_len - 2)) || UPPER(SUBSTR(p_tekst, v_len, 1));
+    END;
+
+    FUNCTION pesel_na_date(p_pesel VARCHAR2) RETURN VARCHAR2 IS
+        v_rok VARCHAR2(4); v_miesiac VARCHAR2(2); v_dzien VARCHAR2(2);
+        v_mc_num NUMBER; v_rok2 VARCHAR2(2);
+    BEGIN
+        v_rok2 := SUBSTR(p_pesel, 1, 2);
+        v_mc_num := TO_NUMBER(SUBSTR(p_pesel, 3, 2));
+        v_dzien := SUBSTR(p_pesel, 5, 2);
+        IF v_mc_num > 20 AND v_mc_num <= 32 THEN v_rok := '20' || v_rok2; v_miesiac := LPAD(TO_CHAR(v_mc_num - 20), 2, '0');
+        ELSIF v_mc_num > 80 AND v_mc_num <= 92 THEN v_rok := '18' || v_rok2; v_miesiac := LPAD(TO_CHAR(v_mc_num - 80), 2, '0');
+        ELSE v_rok := '19' || v_rok2; v_miesiac := LPAD(TO_CHAR(v_mc_num), 2, '0');
+        END IF;
+        RETURN v_rok || '-' || v_miesiac || '-' || v_dzien;
+    END;
+
+    FUNCTION info_kraj(p_country_name countries.country_name%TYPE) RETURN VARCHAR2 IS
+        v_emp_count NUMBER; v_dept_count NUMBER; v_country_id countries.country_id%TYPE;
+    BEGIN
+        SELECT country_id INTO v_country_id FROM countries WHERE country_name = p_country_name;
+        SELECT COUNT(DISTINCT d.department_id), COUNT(e.employee_id)
+        INTO v_dept_count, v_emp_count
+        FROM departments d
+        JOIN locations l ON d.location_id = l.location_id
+        JOIN countries c ON l.country_id = c.country_id
+        LEFT JOIN employees e ON e.department_id = d.department_id
+        WHERE c.country_id = v_country_id;
+        RETURN 'Kraj: ' || p_country_name || ', Pracownicy: ' || v_emp_count || ', Departamenty: ' || v_dept_count;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20003, 'Kraj o nazwie ' || p_country_name || ' nie istnieje.');
+    END;
+
+    PROCEDURE dodaj_job(p_job_id jobs.job_id%TYPE, p_job_title jobs.job_title%TYPE) IS
+    BEGIN
+        INSERT INTO jobs (job_id, job_title) VALUES (p_job_id, p_job_title);
+        COMMIT;
+    EXCEPTION
+        WHEN DUP_VAL_ON_INDEX THEN DBMS_OUTPUT.PUT_LINE('Blad: Job juz istnieje.');
+        WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('Blad: ' || SQLERRM);
+    END;
+
+    PROCEDURE modyfikuj_job(p_job_id jobs.job_id%TYPE, p_job_title jobs.job_title%TYPE) IS
+    BEGIN
+        UPDATE jobs SET job_title = p_job_title WHERE job_id = p_job_id;
+        IF SQL%ROWCOUNT = 0 THEN RAISE_APPLICATION_ERROR(-20001, 'No Jobs updated.'); END IF;
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('Blad: ' || SQLERRM);
+    END;
+
+    PROCEDURE usun_job(p_job_id jobs.job_id%TYPE) IS
+    BEGIN
+        DELETE FROM jobs WHERE job_id = p_job_id;
+        IF SQL%ROWCOUNT = 0 THEN RAISE_APPLICATION_ERROR(-20002, 'No Jobs deleted.'); END IF;
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('Blad: ' || SQLERRM);
+    END;
+
+    PROCEDURE pobierz_pracownika(p_emp_id IN employees.employee_id%TYPE, p_salary OUT employees.salary%TYPE, p_lastname OUT employees.last_name%TYPE) IS
+    BEGIN
+        SELECT salary, last_name INTO p_salary, p_lastname FROM employees WHERE employee_id = p_emp_id;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('Nie znaleziono pracownika o ID: ' || p_emp_id);
+    END;
+
+END pkg_hr;
+/
+
+# zadanie 13 - paczka CRUD dla tabeli REGIONS
+CREATE OR REPLACE PACKAGE pkg_regions AS
+    PROCEDURE dodaj_region(p_region_id regions.region_id%TYPE, p_region_name regions.region_name%TYPE);
+    FUNCTION pobierz_region_po_id(p_region_id regions.region_id%TYPE) RETURN VARCHAR2;
+    FUNCTION pobierz_region_po_nazwie(p_region_name regions.region_name%TYPE) RETURN NUMBER;
+    PROCEDURE pobierz_wszystkie_regiony;
+    PROCEDURE aktualizuj_region(p_region_id regions.region_id%TYPE, p_region_name regions.region_name%TYPE);
+    PROCEDURE usun_region(p_region_id regions.region_id%TYPE);
+END pkg_regions;
+/
+
+CREATE OR REPLACE PACKAGE BODY pkg_regions AS
+
+    PROCEDURE dodaj_region(p_region_id regions.region_id%TYPE, p_region_name regions.region_name%TYPE) IS
+    BEGIN
+        INSERT INTO regions (region_id, region_name) VALUES (p_region_id, p_region_name);
+        COMMIT;
+        DBMS_OUTPUT.PUT_LINE('Dodano region: ' || p_region_name);
+    EXCEPTION
+        WHEN DUP_VAL_ON_INDEX THEN DBMS_OUTPUT.PUT_LINE('Region o podanym ID juz istnieje.');
+        WHEN OTHERS THEN DBMS_OUTPUT.PUT_LINE('Blad: ' || SQLERRM);
+    END;
+
+    FUNCTION pobierz_region_po_id(p_region_id regions.region_id%TYPE) RETURN VARCHAR2 IS
+        v_name regions.region_name%TYPE;
+    BEGIN
+        SELECT region_name INTO v_name FROM regions WHERE region_id = p_region_id;
+        RETURN v_name;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN RETURN 'Region nie znaleziony.';
+    END;
+
+    FUNCTION pobierz_region_po_nazwie(p_region_name regions.region_name%TYPE) RETURN NUMBER IS
+        v_id regions.region_id%TYPE;
+    BEGIN
+        SELECT region_id INTO v_id FROM regions WHERE region_name = p_region_name;
+        RETURN v_id;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN RETURN -1;
+    END;
+
+    PROCEDURE pobierz_wszystkie_regiony IS
+    BEGIN
+        FOR rec IN (SELECT region_id, region_name FROM regions ORDER BY region_id) LOOP
+            DBMS_OUTPUT.PUT_LINE('ID: ' || rec.region_id || ', Nazwa: ' || rec.region_name);
+        END LOOP;
+    END;
+
+    PROCEDURE aktualizuj_region(p_region_id regions.region_id%TYPE, p_region_name regions.region_name%TYPE) IS
+    BEGIN
+        UPDATE regions SET region_name = p_region_name WHERE region_id = p_region_id;
+        IF SQL%ROWCOUNT = 0 THEN
+            DBMS_OUTPUT.PUT_LINE('Nie znaleziono regionu o ID: ' || p_region_id);
+        ELSE
+            COMMIT;
+            DBMS_OUTPUT.PUT_LINE('Zaktualizowano region o ID: ' || p_region_id);
+        END IF;
+    END;
+
+    PROCEDURE usun_region(p_region_id regions.region_id%TYPE) IS
+    BEGIN
+        DELETE FROM regions WHERE region_id = p_region_id;
+        IF SQL%ROWCOUNT = 0 THEN
+            DBMS_OUTPUT.PUT_LINE('Nie znaleziono regionu o ID: ' || p_region_id);
+        ELSE
+            COMMIT;
+            DBMS_OUTPUT.PUT_LINE('Usunieto region o ID: ' || p_region_id);
+        END IF;
+    END;
+
+END pkg_regions;
+/
+
+EXEC pkg_regions.pobierz_wszystkie_regiony;
+SELECT pkg_regions.pobierz_region_po_id(1) FROM dual;

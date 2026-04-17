@@ -1,0 +1,210 @@
+
+# zadanie 1
+DECLARE
+    numer_max NUMBER;
+    v_dept_name departments.department_name%TYPE := 'EDUCATION';
+BEGIN
+    SELECT MAX(department_id) INTO numer_max FROM departments;
+    INSERT INTO departments (department_id, department_name)
+    VALUES (numer_max + 10, v_dept_name);
+    DBMS_OUTPUT.PUT_LINE('Dodano departament o numerze: ' || (numer_max + 10));
+END;
+
+
+# zadanie 2
+DECLARE
+    numer_max NUMBER;
+    v_dept_name departments.department_name%TYPE := 'EDUCATION';
+BEGIN
+    SELECT MAX(department_id) INTO numer_max FROM departments;
+    INSERT INTO departments (department_id, department_name)
+    VALUES (numer_max + 10, v_dept_name);
+    UPDATE departments
+    SET location_id = 3000
+    WHERE department_id = numer_max + 10;
+    DBMS_OUTPUT.PUT_LINE('Dodano i zaktualizowano departament o numerze: ' || (numer_max + 10));
+END;
+
+
+# zadanie 3
+CREATE TABLE nowa (pole VARCHAR2(100));
+
+BEGIN
+    FOR i IN 1..10 LOOP
+        IF i NOT IN (4, 6) THEN
+            INSERT INTO nowa (pole) VALUES (TO_CHAR(i));
+        END IF;
+    END LOOP;
+END;
+
+
+# zadanie 4
+DECLARE
+    v_country countries%ROWTYPE;
+BEGIN
+    SELECT * INTO v_country FROM countries WHERE country_id = 'CA';
+    DBMS_OUTPUT.PUT_LINE('Nazwa: ' || v_country.country_name || ', Region ID: ' || v_country.region_id);
+END;
+
+
+# zadanie 5
+DECLARE
+    CURSOR c_emp IS
+        SELECT salary, last_name
+        FROM employees
+        WHERE department_id = 50;
+BEGIN
+    FOR rec IN c_emp LOOP
+        IF rec.salary > 3100 THEN
+            DBMS_OUTPUT.PUT_LINE(rec.last_name || ' - nie dawac podwyzki');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE(rec.last_name || ' - dac podwyzke');
+        END IF;
+    END LOOP;
+END;
+
+
+# zadanie 6
+DECLARE
+    CURSOR c_emp(p_min NUMBER, p_max NUMBER, p_imie VARCHAR2) IS
+        SELECT salary, first_name, last_name
+        FROM employees
+        WHERE salary BETWEEN p_min AND p_max
+          AND UPPER(first_name) LIKE '%' || UPPER(p_imie) || '%';
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('--- Widelki 1000-5000, czesc imienia: a ---');
+    FOR rec IN c_emp(1000, 5000, 'a') LOOP
+        DBMS_OUTPUT.PUT_LINE(rec.first_name || ' ' || rec.last_name || ' - ' || rec.salary);
+    END LOOP;
+
+    DBMS_OUTPUT.PUT_LINE('--- Widelki 5000-20000, czesc imienia: u ---');
+    FOR rec IN c_emp(5000, 20000, 'u') LOOP
+        DBMS_OUTPUT.PUT_LINE(rec.first_name || ' ' || rec.last_name || ' - ' || rec.salary);
+    END LOOP;
+END;
+
+
+# zadanie 9a
+CREATE OR REPLACE PROCEDURE dodaj_job(
+    p_job_id   jobs.job_id%TYPE,
+    p_job_title jobs.job_title%TYPE
+) IS
+BEGIN
+    INSERT INTO jobs (job_id, job_title)
+    VALUES (p_job_id, p_job_title);
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Dodano job: ' || p_job_id);
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+        DBMS_OUTPUT.PUT_LINE('Blad: Job o podanym ID juz istnieje.');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Blad: ' || SQLERRM);
+END;
+/
+
+EXEC dodaj_job('TEST_01', 'Testowa praca');
+
+# zadanie 9b
+CREATE OR REPLACE PROCEDURE modyfikuj_job(
+    p_job_id    jobs.job_id%TYPE,
+    p_job_title jobs.job_title%TYPE
+) IS
+    e_no_update EXCEPTION;
+    PRAGMA EXCEPTION_INIT(e_no_update, -20001);
+BEGIN
+    UPDATE jobs
+    SET job_title = p_job_title
+    WHERE job_id = p_job_id;
+
+    IF SQL%ROWCOUNT = 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'No Jobs updated, nie znaleziono job o podanym ID.');
+    END IF;
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Zaktualizowano job: ' || p_job_id);
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Blad: ' || SQLERRM);
+END;
+
+
+EXEC modyfikuj_job('TEST_01', 'Zmieniona praca');
+
+# zadanie 9c
+CREATE OR REPLACE PROCEDURE usun_job(
+    p_job_id jobs.job_id%TYPE
+) IS
+    e_no_delete EXCEPTION;
+    PRAGMA EXCEPTION_INIT(e_no_delete, -20002);
+BEGIN
+    DELETE FROM jobs WHERE job_id = p_job_id;
+
+    IF SQL%ROWCOUNT = 0 THEN
+        RAISE_APPLICATION_ERROR(-20002, 'No Jobs deleted, nie znaleziono job o podanym ID.');
+    END IF;
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Usunieto job: ' || p_job_id);
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Blad: ' || SQLERRM);
+END;
+/
+
+EXEC usun_job('TEST_01');
+
+# zadanie 9d
+CREATE OR REPLACE PROCEDURE pobierz_pracownika(
+    p_emp_id   IN  employees.employee_id%TYPE,
+    p_salary   OUT employees.salary%TYPE,
+    p_lastname OUT employees.last_name%TYPE
+) IS
+BEGIN
+    SELECT salary, last_name
+    INTO p_salary, p_lastname
+    FROM employees
+    WHERE employee_id = p_emp_id;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('Nie znaleziono pracownika o ID: ' || p_emp_id);
+END;
+/
+
+DECLARE
+    v_salary   employees.salary%TYPE;
+    v_lastname employees.last_name%TYPE;
+BEGIN
+    pobierz_pracownika(100, v_salary, v_lastname);
+    DBMS_OUTPUT.PUT_LINE('Nazwisko: ' || v_lastname || ', Zarobki: ' || v_salary);
+END;
+
+
+# zadanie 9e
+CREATE SEQUENCE emp_seq START WITH 300 INCREMENT BY 1;
+
+CREATE OR REPLACE PROCEDURE dodaj_pracownika(
+    p_first_name  employees.first_name%TYPE  DEFAULT 'Jan',
+    p_last_name   employees.last_name%TYPE   DEFAULT 'Kowalski',
+    p_email       employees.email%TYPE       DEFAULT 'DEFAULT',
+    p_hire_date   employees.hire_date%TYPE   DEFAULT SYSDATE,
+    p_job_id      employees.job_id%TYPE      DEFAULT 'IT_PROG',
+    p_salary      employees.salary%TYPE      DEFAULT 5000
+) IS
+    e_too_high EXCEPTION;
+BEGIN
+    IF p_salary > 20000 THEN
+        RAISE e_too_high;
+    END IF;
+
+    INSERT INTO employees (employee_id, first_name, last_name, email, hire_date, job_id, salary)
+    VALUES (emp_seq.NEXTVAL, p_first_name, p_last_name, p_email, p_hire_date, p_job_id, p_salary);
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Dodano pracownika: ' || p_first_name || ' ' || p_last_name);
+EXCEPTION
+    WHEN e_too_high THEN
+        DBMS_OUTPUT.PUT_LINE('Blad: Wynagrodzenie nie moze byc wyzsze niz 20000.');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Blad: ' || SQLERRM);
+END;
+/
+
+EXEC dodaj_pracownika(p_first_name => 'Anna', p_last_name => 'Nowak', p_email => 'ANOWAK', p_salary => 7000);
+EXEC dodaj_pracownika(p_salary => 25000);
